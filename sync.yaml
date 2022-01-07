@@ -1,0 +1,48 @@
+##SENSOR
+- platform: template
+    sensors:
+      dimmer_lights_sync:
+        value_template: >
+          {% set my_lights = [ states.[dimmer1], states.[dimmer2] ] %}
+          {% for l in my_lights | sort(attribute='last_updated') %}
+            {%- if loop.first %}{{ l.entity_id }}{% elif loop.last -%},{{ l.attributes.brightness | default(0) }}{% endif -%}
+          {%- endfor %}
+##AUTOMATION
+- alias: Sync Dimmer
+  trigger:
+  - platform: state
+    entity_id: [dimmer1]
+  - platform: state
+    entity_id: [dimmer2]
+  condition:
+    condition: and
+    conditions:
+    - condition: template
+      value_template: '{{ states(''sensor.dimmer_lights_sync'').split('','')[1] | int
+        > 0 }}'
+    - condition: state
+      entity_id: [dimmer1]
+      state: 'on'
+    - condition: state
+      entity_id: [dimmer2]
+      state: 'on'
+    - condition: or
+      conditions:
+      - condition: template
+        value_template: '{{ trigger.from_state.attributes.brightness | int | default(0)
+          > 5 + trigger.to_state.attributes.brightness | int | default(0) }}'
+      - condition: template
+        value_template: '{{ trigger.from_state.attributes.brightness | int | default(0)
+          < trigger.to_state.attributes.brightness | int | default(0) }}'
+  action:
+  - delay: 1
+  - service: light.turn_on
+    data_template:
+      entity_id: '{% set entity_id, brightness = states(''sensor.dimmer_lights_sync'').split('','')
+        %} {{ entity_id }}
+
+        '
+      brightness: '{% set entity_id, brightness = states(''sensor.dimmer_lights_sync'').split('','')
+        %} {%- if brightness | int | default(0) < 10 -%} {% set brightness = [states.[dimmer1].brightness
+        | int | default(0), states.[dimmer2].brightness | int | default(0)]|max
+        %} {%- endif -%} {{ brightness | int }}
